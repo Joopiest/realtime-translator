@@ -222,7 +222,7 @@ custom_html = """
 """
 
 # เรนเดอร์ HTML ด้วยความกว้างเต็มจอ
-components.html(custom_html, height=600)
+components.html(custom_html, height=450)
 
 # ==========================================
 # Credit Footer
