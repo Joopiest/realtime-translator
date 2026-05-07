@@ -228,4 +228,4 @@ components.html(custom_html, height=600)
 # Credit Footer
 # ==========================================
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 14px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 20px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
