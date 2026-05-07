@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# ปรับ layout เป็น "wide" เพื่อให้มีพื้นที่แนวนอนกว้างขึ้น
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
 st.title("⚡ True Real-time Translator")
 st.markdown("ระบบนี้จะประมวลผลบนเบราว์เซอร์ของคุณโดยตรง พิมพ์และแปลข้อความ **ทันทีที่คุณกำลังพูด**")
@@ -21,9 +20,6 @@ custom_html = """
   }
   .container { padding: 10px; }
   
-  /* --------------------------------------------------- */
-  /* สไตล์สำหรับกล่องควบคุม (จัดวางแบบ 2 คอลัมน์) */
-  /* --------------------------------------------------- */
   .controls-container {
       display: flex;
       gap: 20px;
@@ -56,7 +52,6 @@ custom_html = """
       color: #e6eaf1;
   }
   
-  /* สไตล์สำหรับ Slider เลื่อนเวลา */
   .slider-container {
       display: flex;
       align-items: center;
@@ -65,13 +60,13 @@ custom_html = """
   }
   input[type=range] {
       flex: 1;
-      accent-color: #ff4b4b; /* ให้สีเข้ากับปุ่มไมค์ */
+      accent-color: #ff4b4b; 
       cursor: pointer;
   }
   .slider-val {
       font-size: 16px;
       color: #e6eaf1;
-      min-width: 65px;
+      min-width: 80px;
   }
 
   .btn-container { text-align: center; margin-bottom: 20px; }
@@ -114,7 +109,6 @@ custom_html = """
   
   <!-- กล่องควบคุมด้านบน -->
   <div class="controls-container">
-    <!-- 1. เลือกภาษา -->
     <div class="control-box">
         <div class="control-title">🌍 ทิศทางการแปล</div>
         <div class="lang-selector">
@@ -123,12 +117,12 @@ custom_html = """
         </div>
     </div>
     
-    <!-- 2. ปรับเวลาล้างหน้าจอ -->
     <div class="control-box">
-        <div class="control-title">⏱️ เวลาหน่วงก่อนขึ้นประโยคใหม่ (เมื่อหยุดพูด)</div>
+        <!-- ปรับให้ขยายเวลาได้นานขึ้น เหมาะกับการหยุดคิด -->
+        <div class="control-title">⏱️ ถ้าเงียบเกินกี่วินาที ถึงจะล้างหน้าจอขึ้นพารากราฟใหม่?</div>
         <div class="slider-container">
-            <input type="range" id="delaySlider" min="1" max="15" value="4" oninput="updateDelay()">
-            <div class="slider-val"><span id="delayValue">4</span> วินาที</div>
+            <input type="range" id="delaySlider" min="3" max="30" value="10" oninput="updateDelay()">
+            <div class="slider-val"><span id="delayValue">10</span> วินาที</div>
         </div>
     </div>
   </div>
@@ -155,13 +149,15 @@ custom_html = """
   let recognition;
   let isRecognizing = false;
   let isManualStop = false; 
-  let isAutoClearing = false; // ตัวแปรบอกว่าระบบกำลังตัดจบประโยคเอง
+  let isAutoClearing = false; 
   
-  // เวลาหน่วงเคลียร์ข้อความ (ค่าเริ่มต้น 4 วินาที)
-  let clearDelayMs = 4000; 
+  // ตัวแปรเก็บข้อความทั้งหมดในพารากราฟปัจจุบัน (แก้บั๊กข้อความหาย)
+  let globalFinalTranscript = '';
+  
+  // เวลาหน่วงเคลียร์ข้อความ (ค่าเริ่มต้น 10 วินาที สำหรับคนชอบหยุดคิด)
+  let clearDelayMs = 10000; 
   let clearTimer;
   
-  // เวลาตัดไมค์เมื่อลืมปิด (5 นาที)
   let inactivityTimer;
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   
@@ -169,22 +165,21 @@ custom_html = """
   let srcLang = "th";
   let destLang = "en";
 
-  // ฟังก์ชันอัปเดตค่าเวลาจาก Slider ทันทีที่เลื่อน
   function updateDelay() {
       let val = document.getElementById('delaySlider').value;
       document.getElementById('delayValue').innerText = val;
       clearDelayMs = parseInt(val) * 1000;
   }
 
-  // ระบบนับเวลาเพื่อ "ขึ้นประโยคใหม่"
+  // ระบบนับเวลาล้างหน้าจอเมื่อเงียบ
   function resetClearTimer() {
       clearTimeout(clearTimer);
       clearTimer = setTimeout(() => {
-          // เคลียร์หน้าจอ
-          document.getElementById('original').innerHTML = "<span class='placeholder'>[เริ่มประโยคใหม่...]</span>";
+          // ล้างหน่วยความจำข้อความเก่า
+          globalFinalTranscript = ''; 
+          document.getElementById('original').innerHTML = "<span class='placeholder'>[ขึ้นพารากราฟใหม่...]</span>";
           document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
           
-          // บังคับรีสตาร์ทไมค์เพื่อล้างความจำ (Buffer) ของประโยคเก่าทิ้งทั้งหมด
           if (isRecognizing) {
               isAutoClearing = true;
               recognition.stop(); 
@@ -198,7 +193,7 @@ custom_html = """
       inactivityTimer = setTimeout(() => {
         isManualStop = true; 
         recognition.stop();
-        document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ เนื่องจากไม่มีเสียงพูดนานเกินไป...</i></span>";
+        document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ เนื่องจากไม่มีเสียงพูดนานเกิน 5 นาที...</i></span>";
         document.getElementById('translated').innerHTML = "...";
       }, IDLE_TIMEOUT_MS);
     }
@@ -212,6 +207,7 @@ custom_html = """
 
     recognition.onstart = function() {
       isRecognizing = true;
+      globalFinalTranscript = ''; // เริ่มจับใจความใหม่
       document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)...";
       document.getElementById('startBtn').style.backgroundColor = "#00cc66";
       document.getElementById('original').innerHTML = "";
@@ -225,14 +221,12 @@ custom_html = """
       clearTimeout(inactivityTimer);
       clearTimeout(clearTimer);
       
-      // 1. ถ้าเป็นการตัดจบประโยคอัตโนมัติ ให้รีสตาร์ทไมค์ทันที
       if (isAutoClearing) {
           isAutoClearing = false;
           try { recognition.start(); } catch(e){}
           return;
       }
 
-      // 2. ถ้าเบราว์เซอร์ตัดไมค์เอง (กันมือถือดับ)
       if (!isManualStop) {
           try {
               recognition.start();
@@ -240,32 +234,34 @@ custom_html = """
           } catch(e) {}
       }
 
-      // 3. ถ้าผู้ใช้กดปุ่มหยุดเอง
       document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
       document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
     };
 
     recognition.onresult = function(event) {
-      resetInactivityTimer(); // รีเซ็ต 5 นาที
-      resetClearTimer();      // รีเซ็ตตัวนับล้างหน้าจอ ทุกครั้งที่มีเสียงเข้า!
+      resetInactivityTimer(); 
+      clearTimeout(clearTimer); // หยุดเวลานับถอยหลังล้างหน้าจอ ขณะที่กำลังพูดอยู่
       
       let interim_transcript = '';
-      let final_transcript = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          final_transcript += event.results[i][0].transcript;
+          // เก็บสะสมข้อความที่พูดจบประโยคแล้ว เข้าไปในตัวแปรหลัก (ต่อเป็นพารากราฟ)
+          globalFinalTranscript += event.results[i][0].transcript + ' ';
         } else {
+          // ข้อความที่ระบบกำลังพยายามเดา
           interim_transcript += event.results[i][0].transcript;
         }
       }
 
-      let currentText = final_transcript + interim_transcript;
+      // นำข้อความสะสมทั้งหมด + ข้อความที่กำลังเดา มาแสดงผล
+      let currentText = globalFinalTranscript + interim_transcript;
       document.getElementById('original').innerHTML = 
-        final_transcript + '<span class="interim">' + interim_transcript + '</span>';
+        globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
 
       if (currentText.trim() !== "") {
         translateText(currentText, srcLang, destLang);
+        resetClearTimer(); // เริ่มนับถอยหลังล้างหน้าจอใหม่ หลังจากพูดจบคำล่าสุด
       }
     };
   } else {
@@ -335,7 +331,6 @@ custom_html = """
 </html>
 """
 
-# เพิ่มความสูงขึ้นนิดหน่อยเพื่อให้พื้นที่กับเมนูควบคุมใหม่
 components.html(custom_html, height=520)
 
 # ==========================================
