@@ -61,10 +61,10 @@ custom_html = """
   /* --------------------------------------------------- */
   .output-container {
     display: flex;
-    gap: 20px; /* ระยะห่างระหว่างกล่องซ้ายและขวา */
+    gap: 20px; 
   }
   .box { 
-    flex: 1; /* ให้กล่องทั้งสองแบ่งพื้นที่กันคนละ 50% */
+    flex: 1; 
     padding: 20px; 
     border-radius: 8px; 
     background: #1e2127; 
@@ -113,6 +113,7 @@ custom_html = """
 <script>
   let recognition;
   let isRecognizing = false;
+  let isManualStop = false; // ตัวแปรสำหรับเช็คว่าผู้ใช้กดหยุดเองหรือไม่
   
   let sttLang = "th-TH";
   let srcLang = "th";
@@ -134,6 +135,18 @@ custom_html = """
 
     recognition.onend = function() {
       isRecognizing = false;
+      
+      // ท่าไม้ตายป้องกันไมค์ดับ: ถ้าเบราว์เซอร์แอบตัดไปเอง ให้เปิดขึ้นมาใหม่ทันที!
+      if (!isManualStop) {
+          try {
+              recognition.start();
+              return; // ออกจากฟังก์ชันไปเลย
+          } catch(e) {
+              console.error("Auto-restart failed: ", e);
+          }
+      }
+
+      // ถ้าผู้ใช้กดปุ่มหยุดเอง ค่อยเปลี่ยนปุ่มกลับเป็นสีแดง
       document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
       document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
     };
@@ -164,6 +177,7 @@ custom_html = """
 
   function startDictation() {
     if (!isRecognizing) {
+      isManualStop = false; // รีเซ็ตค่าว่าไม่ได้กดหยุดเอง
       recognition.lang = sttLang;
       recognition.start();
     }
@@ -171,6 +185,7 @@ custom_html = """
 
   function stopDictation() {
     if (isRecognizing) {
+      isManualStop = true; // บอกระบบว่าฉันตั้งใจกดหยุดเอง
       recognition.stop();
     }
   }
@@ -193,6 +208,7 @@ custom_html = """
     }
     
     if(isRecognizing) {
+        isManualStop = true; // บังคับหยุดก่อนเปลี่ยนภาษาเพื่อไม่ให้บั๊ก
         stopDictation();
         document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#a3a8b8;'><i>ระบบหยุดฟังเพื่อเปลี่ยนภาษา... กดปุ่มพูดใหม่อีกครั้งครับ</i></span>";
         document.getElementById('translated').innerHTML = "...";
@@ -221,11 +237,11 @@ custom_html = """
 </html>
 """
 
-# เรนเดอร์ HTML ด้วยความกว้างเต็มจอ
+# เรนเดอร์ HTML ด้วยความสูง 450 เพื่อไม่ให้ทับ Credit ด้านล่าง
 components.html(custom_html, height=450)
 
 # ==========================================
 # Credit Footer
 # ==========================================
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 20px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 14px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
