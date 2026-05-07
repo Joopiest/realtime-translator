@@ -69,7 +69,7 @@ custom_html = """
     border-radius: 8px; 
     background: #1e2127; 
     border: 1px solid #333;
-    min-height: 250px; /* เพิ่มความสูงกล่องให้ดูโปร่งขึ้น */
+    min-height: 250px; 
   }
   
   .title { font-weight: bold; color: #a3a8b8; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 10px;}
@@ -99,13 +99,10 @@ custom_html = """
 
   <!-- กล่องแสดงผลแบบซ้าย-ขวา -->
   <div class="output-container">
-    <!-- กล่องซ้าย: ต้นฉบับ -->
     <div class="box">
       <div id="origTitle" class="title">🇹🇭 ต้นฉบับ (กำลังพูด):</div>
       <div id="original" class="text">รอรับเสียง...</div>
     </div>
-
-    <!-- กล่องขวา: คำแปล -->
     <div class="box">
       <div id="transTitle" class="title">🇬🇧 คำแปล (Real-time):</div>
       <div id="translated" class="text">รอการแปล...</div>
@@ -224,5 +221,11 @@ custom_html = """
 </html>
 """
 
-# เรนเดอร์ HTML ด้วยความกว้างเต็มจอ (ใช้ขยายตาม layout="wide" ของ Streamlit)
+# เรนเดอร์ HTML ด้วยความกว้างเต็มจอ
 components.html(custom_html, height=600)
+
+# ==========================================
+# Credit Footer
+# ==========================================
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 14px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
