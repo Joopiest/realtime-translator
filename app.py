@@ -24,9 +24,18 @@ custom_html = """
   button { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
   #startBtn { background-color: #ff4b4b; color: white; margin-right: 10px; }
   #stopBtn { background-color: #444; color: white; }
+  
   .output-container { display: flex; gap: 20px; }
   .box { flex: 1; padding: 20px; border-radius: 8px; background: #1e2127; border: 1px solid #333; display: flex; flex-direction: column; height: 350px; box-sizing: border-box; }
-  .title { font-weight: bold; color: #a3a8b8; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 10px; flex-shrink: 0; }
+  
+  /* --- จัดรูปแบบ Header ของกล่องใหม่ เพื่อใส่ปุ่ม Copy --- */
+  .box-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
+  .title { font-weight: bold; color: #a3a8b8; font-size: 16px; margin: 0; }
+  
+  /* สไตล์ปุ่ม Copy */
+  .copy-btn { padding: 6px 12px; font-size: 13px; font-weight: normal; background-color: transparent; color: #a3a8b8; border: 1px solid #555; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+  .copy-btn:hover { background-color: #333; color: #fff; }
+
   .scroll-area { flex: 1; overflow-y: scroll; padding-right: 10px; }
   .scroll-area::-webkit-scrollbar { width: 8px; }
   .scroll-area::-webkit-scrollbar-track { background: #1e2127; border-radius: 8px; }
@@ -35,7 +44,6 @@ custom_html = """
   .text { font-size: 22px; color: #e6eaf1; line-height: 1.6; }
   .interim { color: #ff4b4b; } 
   .placeholder { color: #555; font-size: 18px; font-style: italic; }
-  /* เส้นคั่นระหว่างพารากราฟประวัติ */
   hr.history-divider { border: 0; border-top: 1px dashed #444; margin: 15px 0; }
 </style>
 </head>
@@ -62,19 +70,27 @@ custom_html = """
   <div class="btn-container">
       <button id="startBtn" onclick="startDictation()">🎤 กดเพื่อพูด (Live)</button>
       <button id="stopBtn" onclick="stopDictation()">⏹️ หยุด</button>
-      <!-- เพิ่มปุ่มล้างหน้าจอแบบ Manual เผื่อจู๊ปอยากลบประวัติเอง -->
       <button id="clearBtn" onclick="clearAllHistory()" style="background-color: #333; color: #aaa; margin-left: 10px;">🗑️ ล้างหน้าจอทั้งหมด</button>
   </div>
 
   <div class="output-container">
+    <!-- กล่องต้นฉบับ -->
     <div class="box">
-      <div id="origTitle" class="title">🇹🇭 ต้นฉบับ (กำลังพูด):</div>
+      <div class="box-header">
+        <div id="origTitle" class="title">🇹🇭 ต้นฉบับ (กำลังพูด):</div>
+        <button id="copyOrigBtn" class="copy-btn" onclick="copyText('scrollOrig', 'copyOrigBtn')">📋 Copy</button>
+      </div>
       <div class="scroll-area" id="scrollOrig">
         <div id="original" class="text"><span class="placeholder">[รอรับเสียง...]</span></div>
       </div>
     </div>
+    
+    <!-- กล่องคำแปล -->
     <div class="box">
-      <div id="transTitle" class="title">🇬🇧 คำแปล (Real-time):</div>
+      <div class="box-header">
+        <div id="transTitle" class="title">🇬🇧 คำแปล (Real-time):</div>
+        <button id="copyTransBtn" class="copy-btn" onclick="copyText('scrollTrans', 'copyTransBtn')">📋 Copy</button>
+      </div>
       <div class="scroll-area" id="scrollTrans">
         <div id="translated" class="text"><span class="placeholder">[รอการแปล...]</span></div>
       </div>
@@ -89,9 +105,8 @@ custom_html = """
   let isAutoClearing = false; 
   
   let globalFinalTranscript = ''; 
-  let currentTranslatedText = ''; // เก็บคำแปลล่าสุดก่อนถูกตัดพารากราฟ
+  let currentTranslatedText = ''; 
   
-  // 🌟 [NEW] ตัวแปรคลังสมบัติ เก็บประวัติข้อความทั้งหมด
   let historyOrig = '';
   let historyTrans = '';
   
@@ -108,6 +123,41 @@ custom_html = """
   let srcLang = "th";       
   let destLang = "en";      
 
+  // 🌟 [NEW] ฟังก์ชันสำหรับปุ่ม Copy
+  function copyText(elementId, btnId) {
+      // ดึงข้อความดิบทั้งหมดออกมาจากกล่อง (innerText จะเปลี่ยนพวก <div> เป็นบรรทัดใหม่ให้อัตโนมัติ)
+      let textToCopy = document.getElementById(elementId).innerText;
+      
+      // ทำความสะอาด: ลบพวกข้อความ Placeholder ทิ้งไปก่อนก๊อปปี้
+      textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '')
+                             .replace(/\[ขึ้นพารากราฟใหม่...\]/g, '')
+                             .replace(/\[ล้างข้อมูลแล้ว รอรับเสียง...\]/g, '')
+                             .replace(/\[รอการแปล...\]/g, '')
+                             .replace(/\[...\]/g, '')
+                             .replace(/ปิดไมค์อัตโนมัติ.*/g, '')
+                             .trim();
+
+      // ใช้คำสั่งคัดลอกลง Clipboard ของเบราว์เซอร์
+      navigator.clipboard.writeText(textToCopy).then(() => {
+          let btn = document.getElementById(btnId);
+          let originalText = btn.innerText;
+          // เปลี่ยนข้อความปุ่มเพื่อให้ผู้ใช้รู้ว่าก๊อปปี้สำเร็จแล้ว
+          btn.innerText = '✅ Copied!';
+          btn.style.color = '#00cc66';
+          btn.style.borderColor = '#00cc66';
+          
+          // คืนค่าปุ่มกลับเป็นเหมือนเดิมหลังจาก 2 วินาที
+          setTimeout(() => { 
+              btn.innerText = '📋 Copy'; 
+              btn.style.color = '#a3a8b8';
+              btn.style.borderColor = '#555';
+          }, 2000);
+      }).catch(err => {
+          console.error('Failed to copy text: ', err);
+          alert("ไม่สามารถ Copy ได้ กรุณาลองใหม่อีกครั้ง");
+      });
+  }
+
   function scrollToBottom(elementId) {
       let scrollBox = document.getElementById(elementId);
       scrollBox.scrollTop = scrollBox.scrollHeight;
@@ -119,32 +169,24 @@ custom_html = """
       clearDelayMs = parseInt(val) * 1000;
   }
 
-  // 🌟 [NEW] ฟังก์ชันสำหรับเก็บข้อความเข้าคลังประวัติ แทนการลบทิ้ง
   function triggerArchive() {
       if (globalFinalTranscript.trim() !== "") {
-          // ดันข้อความเก่าเข้าคลัง พร้อมขีดเส้นประคั่น
           historyOrig += "<div>" + globalFinalTranscript + "</div><hr class='history-divider'>";
           historyTrans += "<div>" + currentTranslatedText + "</div><hr class='history-divider'>";
       }
-
-      // เคลียร์เฉพาะ "ความจำระยะสั้น" เพื่อกัน Google บล็อก
       globalFinalTranscript = ''; 
       currentTranslatedText = '';
-
-      // อัปเดตหน้าจอ โดยเอาประวัติมารวมกับ Placeholder
       document.getElementById('original').innerHTML = historyOrig + "<span class='placeholder'>[รอรับเสียงพารากราฟใหม่...]</span>";
       document.getElementById('translated').innerHTML = historyTrans + "<span class='placeholder'>[...]</span>";
-      
       scrollToBottom('scrollOrig');
       scrollToBottom('scrollTrans');
 
       if (isRecognizing) {
           isAutoClearing = true;
-          recognition.stop(); // บังคับไมค์รีสตาร์ทเพื่อเคลียร์ Buffer
+          recognition.stop(); 
       }
   }
 
-  // ปุ่มสำหรับล้างประวัติทั้งหมด (กรณีอยากเริ่มพูดเรื่องใหม่หมดเลย)
   function clearAllHistory() {
       historyOrig = '';
       historyTrans = '';
@@ -187,17 +229,8 @@ custom_html = """
       isRecognizing = false;
       clearTimeout(inactivityTimer);
       clearTimeout(clearTimer);
-      
-      if (isAutoClearing) { 
-          isAutoClearing = false;
-          try { recognition.start(); } catch(e){}
-          return;
-      }
-
-      if (!isManualStop) { 
-          try { recognition.start(); return; } catch(e) {}
-      }
-
+      if (isAutoClearing) { isAutoClearing = false; try { recognition.start(); } catch(e){} return; }
+      if (!isManualStop) { try { recognition.start(); return; } catch(e) {} }
       document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
       document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
     };
@@ -205,34 +238,21 @@ custom_html = """
     recognition.onresult = function(event) {
       resetInactivityTimer(); 
       clearTimeout(clearTimer); 
-      
       let interim_transcript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          globalFinalTranscript += event.results[i][0].transcript + ' ';
-        } else {
-          interim_transcript += event.results[i][0].transcript;
-        }
+        if (event.results[i].isFinal) { globalFinalTranscript += event.results[i][0].transcript + ' '; } 
+        else { interim_transcript += event.results[i][0].transcript; }
       }
 
       let currentText = globalFinalTranscript + interim_transcript;
-      
-      if (currentText.length > MAX_CHARS) {
-          triggerArchive();
-          return;
-      }
+      if (currentText.length > MAX_CHARS) { triggerArchive(); return; }
 
-      // แสดงผล = ประวัติเก่า + ข้อความที่เพิ่งพูดจบ + คำที่กำลังเดา
-      document.getElementById('original').innerHTML = 
-        historyOrig + globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
+      document.getElementById('original').innerHTML = historyOrig + globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
       scrollToBottom('scrollOrig');
 
       if (currentText.trim() !== "") {
         clearTimeout(translateTimeout);
-        translateTimeout = setTimeout(() => {
-            translateText(currentText, srcLang, destLang);
-        }, DEBOUNCE_MS); 
-        
+        translateTimeout = setTimeout(() => { translateText(currentText, srcLang, destLang); }, DEBOUNCE_MS); 
         resetClearTimer(); 
       }
     };
@@ -243,12 +263,7 @@ custom_html = """
   }
 
   function stopDictation() {
-    if (isRecognizing) { 
-        isManualStop = true; 
-        recognition.stop(); 
-        // เมื่อกดหยุด ให้ดันข้อความสุดท้ายเข้าคลังประวัติทันที
-        setTimeout(triggerArchive, 1000); 
-    }
+    if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); }
   }
   
   function changeLang() {
@@ -272,10 +287,7 @@ custom_html = """
       .then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) { translated_text += data[0][i][0]; }
-        
         currentTranslatedText = translated_text; 
-        
-        // แสดงผล = ประวัติเก่า + คำแปลชุดปัจจุบัน
         document.getElementById('translated').innerHTML = historyTrans + currentTranslatedText;
         scrollToBottom('scrollTrans');
       })
