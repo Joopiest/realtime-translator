@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
 st.title("⚡ True Real-time Translator")
-st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (เครื่องยนต์ Classic หน่วงเวลา 0.6s สุดเสถียร)")
+st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (เครื่องยนต์ Classic หน่วงเวลา 1.0s สุดเสถียร)")
 
 custom_html = """
 <!DOCTYPE html>
@@ -16,7 +16,6 @@ custom_html = """
   .control-box { flex: 1; background: #1e2127; padding: 15px 20px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .control-title { font-size: 14px; color: #a3a8b8; margin-bottom: 12px; font-weight: bold; }
   
-  /* ปรับแต่ง Dropdown ให้เข้ากับตีมมืด */
   select { padding: 8px 12px; border-radius: 6px; background-color: #2b2f36; color: #e6eaf1; border: 1px solid #555; font-size: 16px; cursor: pointer; outline: none; width: 100%; text-align: center; }
   select:hover { border-color: #ff4b4b; }
   
@@ -54,7 +53,6 @@ custom_html = """
   <div class="controls-container">
     <div class="control-box">
         <div class="control-title">🌍 เลือกคู่ภาษา (Pair)</div>
-        <!-- ใช้ Dropdown เก็บครบทั้ง 6 รูปแบบ -->
         <select id="langPairSelect" onchange="changeLang()">
             <option value="th2en" selected>🇹🇭 ไทย ➡️ 🇬🇧 อังกฤษ</option>
             <option value="th2ko">🇹🇭 ไทย ➡️ 🇰🇷 เกาหลี</option>
@@ -80,7 +78,6 @@ custom_html = """
   </div>
 
   <div class="output-container">
-    <!-- กล่องต้นฉบับ -->
     <div class="box">
       <div class="box-header">
         <div id="origTitle" class="title">🎙️ ต้นฉบับ (🇹🇭 ไทย):</div>
@@ -91,7 +88,6 @@ custom_html = """
       </div>
     </div>
     
-    <!-- กล่องคำแปล -->
     <div class="box">
       <div class="box-header">
         <div id="transTitle" class="title">🌐 คำแปล (🇬🇧 อังกฤษ):</div>
@@ -121,7 +117,8 @@ custom_html = """
   let inactivityTimer;      
   
   let translateTimeout;     
-  const DEBOUNCE_MS = 600; // กลับมาใช้ความเร็วแบบ Classic เครื่องลื่นๆ
+  // 🌟 [NEW] ขยับความใจเย็นเป็น 1 วินาที (1000 ms) ตามที่จู๊ปแนะนำครับ!
+  const DEBOUNCE_MS = 1000; 
   const MAX_CHARS = 1000;  
   
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
@@ -248,7 +245,7 @@ custom_html = """
 
       if (currentText.trim() !== "") {
         clearTimeout(translateTimeout);
-        // การยิง API ตัวเดิมที่ไว้ใจได้
+        // การยิง API หน่วงเวลาที่ 1 วินาที
         translateTimeout = setTimeout(() => { translateText(currentText, srcLang, destLang); }, DEBOUNCE_MS); 
         resetClearTimer(); 
       }
@@ -263,7 +260,6 @@ custom_html = """
     if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); }
   }
   
-  // อัปเดตฟังก์ชันดึงคู่ภาษาจาก Dropdown
   function changeLang() {
     let mode = document.getElementById('langPairSelect').value;
     
