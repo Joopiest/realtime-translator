@@ -15,11 +15,8 @@ custom_html = """
   .controls-container { display: flex; gap: 20px; margin-bottom: 25px; }
   .control-box { flex: 1; background: #1e2127; padding: 15px 20px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .control-title { font-size: 14px; color: #a3a8b8; margin-bottom: 12px; font-weight: bold; }
-  
-  /* ปรับเมนูเลือกภาษาให้มี 3 ตัวเลือก */
   .lang-selector { display: flex; gap: 20px; }
   .lang-selector label { font-size: 16px; cursor: pointer; color: #e6eaf1; }
-  
   .slider-container { display: flex; align-items: center; gap: 15px; width: 90%; }
   input[type=range] { flex: 1; accent-color: #ff4b4b; cursor: pointer; }
   .slider-val { font-size: 16px; color: #e6eaf1; min-width: 80px; }
@@ -28,13 +25,11 @@ custom_html = """
   #startBtn { background-color: #ff4b4b; color: white; margin-right: 10px; }
   #stopBtn { background-color: #444; color: white; }
   
-  /* --- จัด Layout สำหรับ 3 กล่อง --- */
   .output-container { display: flex; gap: 15px; }
   .box { flex: 1; padding: 15px; border-radius: 8px; background: #1e2127; border: 1px solid #333; display: flex; flex-direction: column; height: 350px; box-sizing: border-box; }
   
   .box-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
   .title { font-weight: bold; color: #a3a8b8; font-size: 15px; margin: 0; }
-  
   .copy-btn { padding: 5px 10px; font-size: 12px; font-weight: normal; background-color: transparent; color: #a3a8b8; border: 1px solid #555; border-radius: 6px; cursor: pointer; transition: 0.2s; }
   .copy-btn:hover { background-color: #333; color: #fff; }
 
@@ -44,7 +39,6 @@ custom_html = """
   .scroll-area::-webkit-scrollbar-thumb { background: #555; border-radius: 8px; }
   .scroll-area::-webkit-scrollbar-thumb:hover { background: #777; }
   
-  /* ปรับฟอนต์ให้เล็กลงนิดนึงเพื่อให้พอดีกับ 3 กล่อง */
   .text { font-size: 20px; color: #e6eaf1; line-height: 1.6; }
   .interim { color: #ff4b4b; } 
   .placeholder { color: #555; font-size: 16px; font-style: italic; }
@@ -79,7 +73,6 @@ custom_html = """
   </div>
 
   <div class="output-container">
-    <!-- กล่อง 1: ต้นฉบับ -->
     <div class="box">
       <div class="box-header">
         <div id="origTitle" class="title">🇹🇭 ต้นฉบับ (ไทย):</div>
@@ -90,7 +83,6 @@ custom_html = """
       </div>
     </div>
     
-    <!-- กล่อง 2: คำแปลที่ 1 -->
     <div class="box">
       <div class="box-header">
         <div id="trans1Title" class="title">🇬🇧 แปลเป็น อังกฤษ:</div>
@@ -101,7 +93,6 @@ custom_html = """
       </div>
     </div>
 
-    <!-- กล่อง 3: คำแปลที่ 2 -->
     <div class="box">
       <div class="box-header">
         <div id="trans2Title" class="title">🇰🇷 แปลเป็น เกาหลี:</div>
@@ -133,18 +124,17 @@ custom_html = """
   let inactivityTimer;      
   
   let translateTimeout;     
-  const DEBOUNCE_MS = 600; 
+  // 🌟 [NEW] เพิ่มเวลาหน่วงก่อนเริ่มแปลเป็น 1 วินาที (ใจเย็นขึ้น)
+  const DEBOUNCE_MS = 1000; 
   const MAX_CHARS = 1000;  
   
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   
-  // ค่าเริ่มต้น: พูดไทย -> แปลอังกฤษ + เกาหลี
   let sttLang = "th-TH";    
   let srcLang = "th";       
   let destLang1 = "en";      
   let destLang2 = "ko";      
 
-  // ฟังก์ชันก๊อปปี้
   function copyText(elementId, btnId) {
       let textToCopy = document.getElementById(elementId).innerText;
       textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '')
@@ -165,9 +155,7 @@ custom_html = """
               btn.style.color = '#a3a8b8';
               btn.style.borderColor = '#555';
           }, 2000);
-      }).catch(err => {
-          alert("ไม่สามารถ Copy ได้");
-      });
+      }).catch(err => { alert("ไม่สามารถ Copy ได้"); });
   }
 
   function scrollToBottom(elementId) {
@@ -180,7 +168,6 @@ custom_html = """
       document.getElementById('delayValue').innerText = document.getElementById('delaySlider').value;
   }
 
-  // อัปเดตคลังประวัติให้รองรับ 3 กล่อง
   function triggerArchive() {
       if (globalFinalTranscript.trim() !== "") {
           historyOrig += "<div>" + globalFinalTranscript + "</div><hr class='history-divider'>";
@@ -195,9 +182,7 @@ custom_html = """
       document.getElementById('translated1').innerHTML = historyTrans1 + "<span class='placeholder'>[...]</span>";
       document.getElementById('translated2').innerHTML = historyTrans2 + "<span class='placeholder'>[...]</span>";
       
-      scrollToBottom('scrollOrig');
-      scrollToBottom('scrollTrans1');
-      scrollToBottom('scrollTrans2');
+      scrollToBottom('scrollOrig'); scrollToBottom('scrollTrans1'); scrollToBottom('scrollTrans2');
 
       if (isRecognizing) {
           isAutoClearing = true;
@@ -205,7 +190,6 @@ custom_html = """
       }
   }
 
-  // อัปเดตการล้างประวัติให้รองรับ 3 กล่อง
   function clearAllHistory() {
       historyOrig = ''; historyTrans1 = ''; historyTrans2 = '';
       globalFinalTranscript = ''; currentTranslatedText1 = ''; currentTranslatedText2 = '';
@@ -223,8 +207,7 @@ custom_html = """
     clearTimeout(inactivityTimer); 
     if (isRecognizing) {
       inactivityTimer = setTimeout(() => {
-        isManualStop = true; 
-        recognition.stop();
+        isManualStop = true; recognition.stop();
         document.getElementById('original').innerHTML = historyOrig + "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
       }, IDLE_TIMEOUT_MS);
     }
@@ -268,7 +251,6 @@ custom_html = """
 
       if (currentText.trim() !== "") {
         clearTimeout(translateTimeout);
-        // ยิงคำสั่งแปลแบบคู่ขนาน (Double Translation)
         translateTimeout = setTimeout(() => { 
             translateText(currentText, srcLang, destLang1, destLang2); 
         }, DEBOUNCE_MS); 
@@ -285,7 +267,6 @@ custom_html = """
     if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); }
   }
   
-  // 🌟 [NEW] ลอจิกการสลับ 3 ภาษา
   function changeLang() {
     let mode = document.querySelector('input[name="langMode"]:checked').value;
     if (mode === "th") {
@@ -307,12 +288,12 @@ custom_html = """
     if(isRecognizing) { isManualStop = true; stopDictation(); }
   }
 
-  // 🌟 [NEW] ยิง API ไป 2 เส้นพร้อมกัน 
+  // 🌟 [NEW] ฟังก์ชันแปลภาษาแบบเข้าคิว (หลบ Google Rate Limit)
   function translateText(text, src, target1, target2) {
     let url1 = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${target1}&dt=t&q=${encodeURI(text)}`;
     let url2 = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${target2}&dt=t&q=${encodeURI(text)}`;
     
-    // แปลภาษาที่ 1
+    // คิวที่ 1: ยิงภาษาแรกทันที
     fetch(url1).then(res => res.json()).then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) translated_text += data[0][i][0];
@@ -321,21 +302,22 @@ custom_html = """
         scrollToBottom('scrollTrans1');
     }).catch(err => console.error("Error 1:", err)); 
 
-    // แปลภาษาที่ 2
-    fetch(url2).then(res => res.json()).then(data => {
-        let translated_text = '';
-        for (let i = 0; i < data[0].length; i++) translated_text += data[0][i][0];
-        currentTranslatedText2 = translated_text; 
-        document.getElementById('translated2').innerHTML = historyTrans2 + currentTranslatedText2;
-        scrollToBottom('scrollTrans2');
-    }).catch(err => console.error("Error 2:", err)); 
+    // คิวที่ 2: หน่วงเวลา 300ms ค่อยยิงภาษาที่สองตามไป
+    setTimeout(() => {
+        fetch(url2).then(res => res.json()).then(data => {
+            let translated_text = '';
+            for (let i = 0; i < data[0].length; i++) translated_text += data[0][i][0];
+            currentTranslatedText2 = translated_text; 
+            document.getElementById('translated2').innerHTML = historyTrans2 + currentTranslatedText2;
+            scrollToBottom('scrollTrans2');
+        }).catch(err => console.error("Error 2:", err)); 
+    }, 300);
   }
 </script>
 </body>
 </html>
 """
 
-# เผื่อความสูงของหน้าจอไว้ให้ 3 กล่องโชว์ได้สวยๆ
 components.html(custom_html, height=650)
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 14px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
