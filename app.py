@@ -2,8 +2,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
-st.title("⚡ True Real-time Translator (Stable Pair Edition)")
-st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (รองรับ ไทย, อังกฤษ, เกาหลี)")
+st.title("⚡ True Real-time Translator (Pro Interpreter Edition)")
+st.markdown("ระบบแปลภาษาแบบ Sentence-by-Sentence ลื่นไหล ไม่โดนบล็อก (รองรับ ไทย, อังกฤษ, เกาหลี)")
 
 custom_html = """
 <!DOCTYPE html>
@@ -16,7 +16,6 @@ custom_html = """
   .control-box { flex: 1; background: #1e2127; padding: 15px 20px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .control-title { font-size: 14px; color: #a3a8b8; margin-bottom: 12px; font-weight: bold; }
   
-  /* สไตล์กล่อง Dropdown เลือกภาษา */
   .lang-dropdown-container { display: flex; align-items: center; gap: 15px; }
   select { padding: 8px 12px; border-radius: 6px; background-color: #2b2f36; color: #e6eaf1; border: 1px solid #555; font-size: 16px; cursor: pointer; outline: none; transition: 0.2s; }
   select:hover { border-color: #ff4b4b; }
@@ -29,7 +28,6 @@ custom_html = """
   #startBtn { background-color: #ff4b4b; color: white; margin-right: 10px; }
   #stopBtn { background-color: #444; color: white; }
   
-  /* Layout 2 กล่อง (ซ้าย-ขวา) */
   .output-container { display: flex; gap: 20px; }
   .box { flex: 1; padding: 20px; border-radius: 8px; background: #1e2127; border: 1px solid #333; display: flex; flex-direction: column; height: 350px; box-sizing: border-box; }
   
@@ -57,14 +55,12 @@ custom_html = """
     <div class="control-box">
         <div class="control-title">🌍 เลือกคู่ภาษา (Pair)</div>
         <div class="lang-dropdown-container">
-            <!-- เลือกภาษาคนพูด -->
             <select id="srcLangSelect" onchange="changeLang()">
                 <option value="th" selected>🇹🇭 ไทย</option>
                 <option value="en">🇬🇧 อังกฤษ</option>
                 <option value="ko">🇰🇷 เกาหลี</option>
             </select>
             <span style="font-size: 20px;">➡️</span>
-            <!-- เลือกภาษาที่จะแปล -->
             <select id="destLangSelect" onchange="changeLang()">
                 <option value="en" selected>🇬🇧 อังกฤษ</option>
                 <option value="th">🇹🇭 ไทย</option>
@@ -88,7 +84,6 @@ custom_html = """
   </div>
 
   <div class="output-container">
-    <!-- กล่องซ้าย (ต้นฉบับ) -->
     <div class="box">
       <div class="box-header">
         <div id="origTitle" class="title">🎙️ ต้นฉบับ (🇹🇭 ไทย):</div>
@@ -99,7 +94,6 @@ custom_html = """
       </div>
     </div>
     
-    <!-- กล่องขวา (คำแปล) -->
     <div class="box">
       <div class="box-header">
         <div id="transTitle" class="title">🌐 คำแปล (🇬🇧 อังกฤษ):</div>
@@ -128,22 +122,17 @@ custom_html = """
   let clearTimer;           
   let inactivityTimer;      
   
-  let translateTimeout;     
-  const DEBOUNCE_MS = 600; // กลับมาใช้ความเร็วแบบเสถียร ยิง 1 เส้น
   const MAX_CHARS = 1000;  
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   
-  // ค่าเริ่มต้น
   let sttLang = "th-TH";    
   let srcLang = "th";       
   let destLang = "en";      
 
-  // ฟังก์ชันสลับภาษาจาก Dropdown
   function changeLang() {
       let src = document.getElementById('srcLangSelect').value;
       let dest = document.getElementById('destLangSelect').value;
 
-      // ป้องกันการเลือกภาษาเดียวกันทั้งสองฝั่ง (ถ้าเผลอเลือก จะแอบสลับให้อัตโนมัติ)
       if (src === dest) {
           if (src === 'th') document.getElementById('destLangSelect').value = 'en';
           else if (src === 'en') document.getElementById('destLangSelect').value = 'th';
@@ -151,7 +140,6 @@ custom_html = """
           dest = document.getElementById('destLangSelect').value;
       }
 
-      // เซ็ตค่าภาษาให้ไมโครโฟน
       if (src === 'th') sttLang = "th-TH";
       else if (src === 'en') sttLang = "en-US";
       else if (src === 'ko') sttLang = "ko-KR";
@@ -159,7 +147,6 @@ custom_html = """
       srcLang = src;
       destLang = dest;
 
-      // อัปเดตหัวข้อบนกล่อง
       let titles = { 'th': '🇹🇭 ไทย', 'en': '🇬🇧 อังกฤษ', 'ko': '🇰🇷 เกาหลี' };
       document.getElementById('origTitle').innerText = `🎙️ ต้นฉบับ (${titles[src]}):`;
       document.getElementById('transTitle').innerText = `🌐 คำแปล (${titles[dest]}):`;
@@ -236,21 +223,28 @@ custom_html = """
     recognition.onresult = function(event) {
       resetInactivityTimer(); clearTimeout(clearTimer); 
       let interim_transcript = '';
+      let is_new_final_added = false; // ตัวจับว่ามีประโยคใหม่ถูกยืนยันหรือยัง
+
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) { globalFinalTranscript += event.results[i][0].transcript + ' '; } 
-        else { interim_transcript += event.results[i][0].transcript; }
+        if (event.results[i].isFinal) { 
+            globalFinalTranscript += event.results[i][0].transcript + ' '; 
+            is_new_final_added = true; // ✔️ เจอคำที่ยืนยันแล้ว
+        } 
+        else { 
+            interim_transcript += event.results[i][0].transcript; 
+        }
       }
 
-      let currentText = globalFinalTranscript + interim_transcript;
-      if (currentText.length > MAX_CHARS) { triggerArchive(); return; }
+      if (globalFinalTranscript.length > MAX_CHARS) { triggerArchive(); return; }
 
+      // อัปเดตกล่องซ้าย (ต้นฉบับโชว์สีแดงเหมือนเดิม)
       document.getElementById('original').innerHTML = historyOrig + globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
       scrollToBottom('scrollOrig');
 
-      if (currentText.trim() !== "") {
-        clearTimeout(translateTimeout);
-        translateTimeout = setTimeout(() => { translateText(currentText, srcLang, destLang); }, DEBOUNCE_MS); 
-        resetClearTimer(); 
+      // 🌟 [NEW] แปลภาษาเฉพาะตอนที่ "จบประโยค" เท่านั้น! (ข้ามพวกตัวหนังสือสีแดงไปเลย)
+      if (is_new_final_added && globalFinalTranscript.trim() !== "") {
+          translateTextPOST(globalFinalTranscript, srcLang, destLang);
+          resetClearTimer(); 
       }
     };
   }
@@ -258,19 +252,24 @@ custom_html = """
   function startDictation() { if (!isRecognizing) { isManualStop = false; isAutoClearing = false; recognition.lang = sttLang; recognition.start(); } }
   function stopDictation() { if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); } }
 
-  // ยิง API เส้นเดียวแบบเสถียร
-  function translateText(text, src, dest) {
-    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t&q=${encodeURI(text)}`;
-    fetch(url)
-      .then(response => response.json())
-      .then(data => {
+  // 🌟 [NEW] ยิง API ด้วย POST Method และซ่อน Payload ไว้ใน Body (Google จับยากขึ้นมากๆ)
+  function translateTextPOST(text, src, dest) {
+    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t`;
+    
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ q: text })
+    })
+    .then(response => response.json())
+    .then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) { translated_text += data[0][i][0]; }
         currentTranslatedText = translated_text; 
         document.getElementById('translated').innerHTML = historyTrans + currentTranslatedText;
         scrollToBottom('scrollTrans');
-      })
-      .catch(err => console.error("Translate Error:", err)); 
+    })
+    .catch(err => console.error("Translate Error:", err)); 
   }
 </script>
 </body>
