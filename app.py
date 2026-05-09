@@ -3,11 +3,8 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
 st.title("⚡ True Real-time Translator")
-st.markdown("ระบบนี้จะประมวลผลบนเบราว์เซอร์ของคุณโดยตรง พิมพ์และแปลข้อความ **ทันทีที่คุณกำลังพูด**")
+st.markdown("ระบบแปลภาษาด่วนแบบ Real-time พัฒนาโดยใช้เทคโนโลยี Web Speech API และ JavaScript")
 
-# ==========================================
-# ฝังโค้ด HTML + JavaScript เข้าไปใน Streamlit
-# ==========================================
 custom_html = """
 <!DOCTYPE html>
 <html>
@@ -42,64 +39,41 @@ custom_html = """
       margin-bottom: 12px;
       font-weight: bold;
   }
-  .lang-selector {
-      display: flex;
-      gap: 25px;
-  }
-  .lang-selector label {
-      font-size: 16px;
-      cursor: pointer;
-      color: #e6eaf1;
-  }
   
-  .slider-container {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-      width: 90%;
-  }
-  input[type=range] {
-      flex: 1;
-      accent-color: #ff4b4b; 
-      cursor: pointer;
-  }
-  .slider-val {
-      font-size: 16px;
-      color: #e6eaf1;
-      min-width: 80px;
-  }
+  .lang-selector { display: flex; gap: 25px; }
+  .lang-selector label { font-size: 16px; cursor: pointer; color: #e6eaf1; }
+  
+  .slider-container { display: flex; align-items: center; gap: 15px; width: 90%; }
+  input[type=range] { flex: 1; accent-color: #ff4b4b; cursor: pointer; }
+  .slider-val { font-size: 16px; color: #e6eaf1; min-width: 80px; }
 
   .btn-container { text-align: center; margin-bottom: 20px; }
   button { 
-    padding: 12px 24px; 
-    font-size: 16px; 
-    font-weight: bold;
-    border: none; 
-    border-radius: 8px; 
-    cursor: pointer; 
-    transition: 0.2s;
+    padding: 12px 24px; font-size: 16px; font-weight: bold;
+    border: none; border-radius: 8px; cursor: pointer; transition: 0.2s;
   }
   #startBtn { background-color: #ff4b4b; color: white; margin-right: 10px; }
-  #startBtn:hover { background-color: #ff3333; }
   #stopBtn { background-color: #444; color: white; }
-  #stopBtn:hover { background-color: #555; }
 
-  .output-container {
-    display: flex;
-    gap: 20px; 
-  }
+  .output-container { display: flex; gap: 20px; }
+  
+  /* --- ส่วนที่อัปเดต: ล็อกความสูงและใส่ Scrollbar --- */
   .box { 
-    flex: 1; 
-    padding: 20px; 
-    border-radius: 8px; 
-    background: #1e2127; 
-    border: 1px solid #333;
-    min-height: 250px; 
+    flex: 1; padding: 20px; border-radius: 8px; 
+    background: #1e2127; border: 1px solid #333; 
+    height: 300px;         /* ล็อกความสูงกล่องไว้ที่ 300px */
+    overflow-y: auto;      /* ให้มี Scrollbar แนวตั้งเมื่อข้อความล้น */
   }
+  
+  /* ปรับแต่งหน้าตา Scrollbar ให้ดูโมเดิร์นเข้ากับเว็บ Dark Mode */
+  .box::-webkit-scrollbar { width: 8px; }
+  .box::-webkit-scrollbar-track { background: #1e2127; border-radius: 8px; }
+  .box::-webkit-scrollbar-thumb { background: #555; border-radius: 8px; }
+  .box::-webkit-scrollbar-thumb:hover { background: #777; }
   
   .title { font-weight: bold; color: #a3a8b8; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 10px;}
   .text { font-size: 22px; color: #e6eaf1; line-height: 1.6; }
-  .interim { color: #ff4b4b; }
+  .interim { color: #ff4b4b; } 
   .placeholder { color: #555; font-size: 18px; font-style: italic; }
 </style>
 </head>
@@ -107,7 +81,6 @@ custom_html = """
 
 <div class="container">
   
-  <!-- กล่องควบคุมด้านบน -->
   <div class="controls-container">
     <div class="control-box">
         <div class="control-title">🌍 ทิศทางการแปล</div>
@@ -118,7 +91,6 @@ custom_html = """
     </div>
     
     <div class="control-box">
-        <!-- ปรับให้ขยายเวลาได้นานขึ้น เหมาะกับการหยุดคิด -->
         <div class="control-title">⏱️ ถ้าเงียบเกินกี่วินาที ถึงจะล้างหน้าจอขึ้นพารากราฟใหม่?</div>
         <div class="slider-container">
             <input type="range" id="delaySlider" min="3" max="30" value="10" oninput="updateDelay()">
@@ -132,13 +104,13 @@ custom_html = """
       <button id="stopBtn" onclick="stopDictation()">⏹️ หยุด</button>
   </div>
 
-  <!-- กล่องแสดงผล -->
   <div class="output-container">
-    <div class="box">
+    <!-- เพิ่ม ID ให้กล่อง เพื่อให้ JavaScript สั่งเลื่อน Scrollbar ได้ -->
+    <div class="box" id="boxOrig">
       <div id="origTitle" class="title">🇹🇭 ต้นฉบับ (กำลังพูด):</div>
       <div id="original" class="text"><span class="placeholder">[รอรับเสียง...]</span></div>
     </div>
-    <div class="box">
+    <div class="box" id="boxTrans">
       <div id="transTitle" class="title">🇬🇧 คำแปล (Real-time):</div>
       <div id="translated" class="text"><span class="placeholder">[รอการแปล...]</span></div>
     </div>
@@ -146,24 +118,26 @@ custom_html = """
 </div>
 
 <script>
-  let recognition;
+  let recognition;       
   let isRecognizing = false;
   let isManualStop = false; 
   let isAutoClearing = false; 
+  let globalFinalTranscript = ''; 
   
-  // ตัวแปรเก็บข้อความทั้งหมดในพารากราฟปัจจุบัน (แก้บั๊กข้อความหาย)
-  let globalFinalTranscript = '';
-  
-  // เวลาหน่วงเคลียร์ข้อความ (ค่าเริ่มต้น 10 วินาที สำหรับคนชอบหยุดคิด)
   let clearDelayMs = 10000; 
-  let clearTimer;
-  
-  let inactivityTimer;
+  let clearTimer;           
+  let inactivityTimer;      
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   
-  let sttLang = "th-TH";
-  let srcLang = "th";
-  let destLang = "en";
+  let sttLang = "th-TH";    
+  let srcLang = "th";       
+  let destLang = "en";      
+
+  // ฟังก์ชันเลื่อน Scrollbar ลงล่างสุดอัตโนมัติ
+  function scrollToBottom(elementId) {
+      let box = document.getElementById(elementId);
+      box.scrollTop = box.scrollHeight;
+  }
 
   function updateDelay() {
       let val = document.getElementById('delaySlider').value;
@@ -171,11 +145,9 @@ custom_html = """
       clearDelayMs = parseInt(val) * 1000;
   }
 
-  // ระบบนับเวลาล้างหน้าจอเมื่อเงียบ
   function resetClearTimer() {
       clearTimeout(clearTimer);
       clearTimer = setTimeout(() => {
-          // ล้างหน่วยความจำข้อความเก่า
           globalFinalTranscript = ''; 
           document.getElementById('original').innerHTML = "<span class='placeholder'>[ขึ้นพารากราฟใหม่...]</span>";
           document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
@@ -193,8 +165,7 @@ custom_html = """
       inactivityTimer = setTimeout(() => {
         isManualStop = true; 
         recognition.stop();
-        document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ เนื่องจากไม่มีเสียงพูดนานเกิน 5 นาที...</i></span>";
-        document.getElementById('translated').innerHTML = "...";
+        document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
       }, IDLE_TIMEOUT_MS);
     }
   }
@@ -207,12 +178,9 @@ custom_html = """
 
     recognition.onstart = function() {
       isRecognizing = true;
-      globalFinalTranscript = ''; // เริ่มจับใจความใหม่
+      globalFinalTranscript = ''; 
       document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)...";
       document.getElementById('startBtn').style.backgroundColor = "#00cc66";
-      document.getElementById('original').innerHTML = "";
-      document.getElementById('translated').innerHTML = "";
-      
       resetInactivityTimer(); 
     };
 
@@ -221,17 +189,14 @@ custom_html = """
       clearTimeout(inactivityTimer);
       clearTimeout(clearTimer);
       
-      if (isAutoClearing) {
+      if (isAutoClearing) { 
           isAutoClearing = false;
           try { recognition.start(); } catch(e){}
           return;
       }
 
-      if (!isManualStop) {
-          try {
-              recognition.start();
-              return; 
-          } catch(e) {}
+      if (!isManualStop) { 
+          try { recognition.start(); return; } catch(e) {}
       }
 
       document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
@@ -240,32 +205,29 @@ custom_html = """
 
     recognition.onresult = function(event) {
       resetInactivityTimer(); 
-      clearTimeout(clearTimer); // หยุดเวลานับถอยหลังล้างหน้าจอ ขณะที่กำลังพูดอยู่
+      clearTimeout(clearTimer); 
       
       let interim_transcript = '';
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          // เก็บสะสมข้อความที่พูดจบประโยคแล้ว เข้าไปในตัวแปรหลัก (ต่อเป็นพารากราฟ)
           globalFinalTranscript += event.results[i][0].transcript + ' ';
         } else {
-          // ข้อความที่ระบบกำลังพยายามเดา
           interim_transcript += event.results[i][0].transcript;
         }
       }
 
-      // นำข้อความสะสมทั้งหมด + ข้อความที่กำลังเดา มาแสดงผล
       let currentText = globalFinalTranscript + interim_transcript;
       document.getElementById('original').innerHTML = 
         globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
 
+      // เลื่อนกล่องต้นฉบับลงล่างสุด
+      scrollToBottom('boxOrig');
+
       if (currentText.trim() !== "") {
         translateText(currentText, srcLang, destLang);
-        resetClearTimer(); // เริ่มนับถอยหลังล้างหน้าจอใหม่ หลังจากพูดจบคำล่าสุด
+        resetClearTimer(); 
       }
     };
-  } else {
-    document.getElementById('original').innerHTML = "เบราว์เซอร์ของคุณไม่รองรับ แนะนำให้ใช้ Google Chrome หรือ Edge ครับ";
   }
 
   function startDictation() {
@@ -286,17 +248,12 @@ custom_html = """
   
   function changeLang() {
     let mode = document.querySelector('input[name="langMode"]:checked').value;
-    
     if (mode === "th2en") {
-        sttLang = "th-TH";
-        srcLang = "th";
-        destLang = "en";
+        sttLang = "th-TH"; srcLang = "th"; destLang = "en";
         document.getElementById('origTitle').innerText = "🇹🇭 ต้นฉบับ (กำลังพูด):";
         document.getElementById('transTitle').innerText = "🇬🇧 คำแปล (Real-time):";
     } else {
-        sttLang = "en-US";
-        srcLang = "en";
-        destLang = "th";
+        sttLang = "en-US"; srcLang = "en"; destLang = "th";
         document.getElementById('origTitle').innerText = "🇬🇧 ต้นฉบับ (กำลังพูด):";
         document.getElementById('transTitle').innerText = "🇹🇭 คำแปล (Real-time):";
     }
@@ -304,17 +261,11 @@ custom_html = """
     if(isRecognizing) {
         isManualStop = true; 
         stopDictation();
-        document.getElementById('original').innerHTML = "<span class='placeholder'>ระบบหยุดฟังเพื่อเปลี่ยนภาษา... กดปุ่มพูดใหม่อีกครั้งครับ</span>";
-        document.getElementById('translated').innerHTML = "...";
-    } else {
-        document.getElementById('original').innerHTML = "<span class='placeholder'>[รอรับเสียง...]</span>";
-        document.getElementById('translated').innerHTML = "<span class='placeholder'>[รอการแปล...]</span>";
     }
   }
 
   function translateText(text, src, dest) {
     let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t&q=${encodeURI(text)}`;
-    
     fetch(url)
       .then(response => response.json())
       .then(data => {
@@ -323,18 +274,18 @@ custom_html = """
            translated_text += data[0][i][0];
         }
         document.getElementById('translated').innerHTML = translated_text;
-      })
-      .catch(error => console.error('Error:', error));
+        
+        // เลื่อนกล่องคำแปลลงล่างสุดหลังจากแปลเสร็จ
+        scrollToBottom('boxTrans');
+      });
   }
 </script>
 </body>
 </html>
 """
 
-components.html(custom_html, height=520)
+# เพิ่มความสูงของกล่อง Iframe เป็น 550 ให้มีพื้นที่รองรับ Scrollbar พอดี
+components.html(custom_html, height=550)
 
-# ==========================================
-# Credit Footer
-# ==========================================
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #a3a8b8; font-size: 14px;'>Developed by <b>Joopiest Udomsaph</b></p>", unsafe_allow_html=True)
