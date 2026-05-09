@@ -2,8 +2,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
-st.title("⚡ True Real-time Translator (Pro Interpreter Edition)")
-st.markdown("ระบบแปลภาษาแบบ Sentence-by-Sentence ลื่นไหล ไม่โดนบล็อก (รองรับ ไทย, อังกฤษ, เกาหลี)")
+st.title("⚡ True Real-time Translator")
+st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (เครื่องยนต์ Classic หน่วงเวลา 0.6s สุดเสถียร)")
 
 custom_html = """
 <!DOCTYPE html>
@@ -16,8 +16,8 @@ custom_html = """
   .control-box { flex: 1; background: #1e2127; padding: 15px 20px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .control-title { font-size: 14px; color: #a3a8b8; margin-bottom: 12px; font-weight: bold; }
   
-  .lang-dropdown-container { display: flex; align-items: center; gap: 15px; }
-  select { padding: 8px 12px; border-radius: 6px; background-color: #2b2f36; color: #e6eaf1; border: 1px solid #555; font-size: 16px; cursor: pointer; outline: none; transition: 0.2s; }
+  /* ปรับแต่ง Dropdown ให้เข้ากับตีมมืด */
+  select { padding: 8px 12px; border-radius: 6px; background-color: #2b2f36; color: #e6eaf1; border: 1px solid #555; font-size: 16px; cursor: pointer; outline: none; width: 100%; text-align: center; }
   select:hover { border-color: #ff4b4b; }
   
   .slider-container { display: flex; align-items: center; gap: 15px; width: 90%; }
@@ -33,6 +33,7 @@ custom_html = """
   
   .box-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
   .title { font-weight: bold; color: #a3a8b8; font-size: 16px; margin: 0; }
+  
   .copy-btn { padding: 6px 12px; font-size: 13px; font-weight: normal; background-color: transparent; color: #a3a8b8; border: 1px solid #555; border-radius: 6px; cursor: pointer; transition: 0.2s; }
   .copy-btn:hover { background-color: #333; color: #fff; }
 
@@ -41,7 +42,6 @@ custom_html = """
   .scroll-area::-webkit-scrollbar-track { background: #1e2127; border-radius: 8px; }
   .scroll-area::-webkit-scrollbar-thumb { background: #555; border-radius: 8px; }
   .scroll-area::-webkit-scrollbar-thumb:hover { background: #777; }
-  
   .text { font-size: 22px; color: #e6eaf1; line-height: 1.6; }
   .interim { color: #ff4b4b; } 
   .placeholder { color: #555; font-size: 18px; font-style: italic; }
@@ -54,19 +54,15 @@ custom_html = """
   <div class="controls-container">
     <div class="control-box">
         <div class="control-title">🌍 เลือกคู่ภาษา (Pair)</div>
-        <div class="lang-dropdown-container">
-            <select id="srcLangSelect" onchange="changeLang()">
-                <option value="th" selected>🇹🇭 ไทย</option>
-                <option value="en">🇬🇧 อังกฤษ</option>
-                <option value="ko">🇰🇷 เกาหลี</option>
-            </select>
-            <span style="font-size: 20px;">➡️</span>
-            <select id="destLangSelect" onchange="changeLang()">
-                <option value="en" selected>🇬🇧 อังกฤษ</option>
-                <option value="th">🇹🇭 ไทย</option>
-                <option value="ko">🇰🇷 เกาหลี</option>
-            </select>
-        </div>
+        <!-- ใช้ Dropdown เก็บครบทั้ง 6 รูปแบบ -->
+        <select id="langPairSelect" onchange="changeLang()">
+            <option value="th2en" selected>🇹🇭 ไทย ➡️ 🇬🇧 อังกฤษ</option>
+            <option value="th2ko">🇹🇭 ไทย ➡️ 🇰🇷 เกาหลี</option>
+            <option value="en2th">🇬🇧 อังกฤษ ➡️ 🇹🇭 ไทย</option>
+            <option value="en2ko">🇬🇧 อังกฤษ ➡️ 🇰🇷 เกาหลี</option>
+            <option value="ko2th">🇰🇷 เกาหลี ➡️ 🇹🇭 ไทย</option>
+            <option value="ko2en">🇰🇷 เกาหลี ➡️ 🇬🇧 อังกฤษ</option>
+        </select>
     </div>
     <div class="control-box">
         <div class="control-title">⏱️ ถ้าเงียบเกินกี่วินาที ถึงจะตัดขึ้นพารากราฟใหม่?</div>
@@ -84,6 +80,7 @@ custom_html = """
   </div>
 
   <div class="output-container">
+    <!-- กล่องต้นฉบับ -->
     <div class="box">
       <div class="box-header">
         <div id="origTitle" class="title">🎙️ ต้นฉบับ (🇹🇭 ไทย):</div>
@@ -94,6 +91,7 @@ custom_html = """
       </div>
     </div>
     
+    <!-- กล่องคำแปล -->
     <div class="box">
       <div class="box-header">
         <div id="transTitle" class="title">🌐 คำแปล (🇬🇧 อังกฤษ):</div>
@@ -122,47 +120,38 @@ custom_html = """
   let clearTimer;           
   let inactivityTimer;      
   
+  let translateTimeout;     
+  const DEBOUNCE_MS = 600; // กลับมาใช้ความเร็วแบบ Classic เครื่องลื่นๆ
   const MAX_CHARS = 1000;  
-  const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   
+  const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   let sttLang = "th-TH";    
   let srcLang = "th";       
   let destLang = "en";      
 
-  function changeLang() {
-      let src = document.getElementById('srcLangSelect').value;
-      let dest = document.getElementById('destLangSelect').value;
-
-      if (src === dest) {
-          if (src === 'th') document.getElementById('destLangSelect').value = 'en';
-          else if (src === 'en') document.getElementById('destLangSelect').value = 'th';
-          else document.getElementById('destLangSelect').value = 'th';
-          dest = document.getElementById('destLangSelect').value;
-      }
-
-      if (src === 'th') sttLang = "th-TH";
-      else if (src === 'en') sttLang = "en-US";
-      else if (src === 'ko') sttLang = "ko-KR";
-
-      srcLang = src;
-      destLang = dest;
-
-      let titles = { 'th': '🇹🇭 ไทย', 'en': '🇬🇧 อังกฤษ', 'ko': '🇰🇷 เกาหลี' };
-      document.getElementById('origTitle').innerText = `🎙️ ต้นฉบับ (${titles[src]}):`;
-      document.getElementById('transTitle').innerText = `🌐 คำแปล (${titles[dest]}):`;
-
-      if(isRecognizing) { isManualStop = true; stopDictation(); }
-  }
-
   function copyText(elementId, btnId) {
       let textToCopy = document.getElementById(elementId).innerText;
-      textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '').replace(/\[ขึ้นพารากราฟใหม่...\]/g, '').replace(/\[ล้างข้อมูลแล้ว รอรับเสียง...\]/g, '').replace(/\[รอการแปล...\]/g, '').replace(/\[...\]/g, '').replace(/ปิดไมค์อัตโนมัติ.*/g, '').trim();
+      textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '')
+                             .replace(/\[ขึ้นพารากราฟใหม่...\]/g, '')
+                             .replace(/\[ล้างข้อมูลแล้ว รอรับเสียง...\]/g, '')
+                             .replace(/\[รอการแปล...\]/g, '')
+                             .replace(/\[...\]/g, '')
+                             .replace(/ปิดไมค์อัตโนมัติ.*/g, '')
+                             .trim();
 
       navigator.clipboard.writeText(textToCopy).then(() => {
           let btn = document.getElementById(btnId);
-          btn.innerText = '✅ Copied!'; btn.style.color = '#00cc66'; btn.style.borderColor = '#00cc66';
-          setTimeout(() => { btn.innerText = '📋 Copy'; btn.style.color = '#a3a8b8'; btn.style.borderColor = '#555'; }, 2000);
-      }).catch(err => { alert("ไม่สามารถ Copy ได้"); });
+          btn.innerText = '✅ Copied!';
+          btn.style.color = '#00cc66';
+          btn.style.borderColor = '#00cc66';
+          setTimeout(() => { 
+              btn.innerText = '📋 Copy'; 
+              btn.style.color = '#a3a8b8';
+              btn.style.borderColor = '#555';
+          }, 2000);
+      }).catch(err => {
+          alert("ไม่สามารถ Copy ได้ กรุณาลองใหม่อีกครั้ง");
+      });
   }
 
   function scrollToBottom(elementId) {
@@ -171,8 +160,9 @@ custom_html = """
   }
 
   function updateDelay() {
-      clearDelayMs = parseInt(document.getElementById('delaySlider').value) * 1000;
-      document.getElementById('delayValue').innerText = document.getElementById('delaySlider').value;
+      let val = document.getElementById('delaySlider').value;
+      document.getElementById('delayValue').innerText = val;
+      clearDelayMs = parseInt(val) * 1000;
   }
 
   function triggerArchive() {
@@ -180,26 +170,39 @@ custom_html = """
           historyOrig += "<div>" + globalFinalTranscript + "</div><hr class='history-divider'>";
           historyTrans += "<div>" + currentTranslatedText + "</div><hr class='history-divider'>";
       }
-      globalFinalTranscript = ''; currentTranslatedText = '';
+      globalFinalTranscript = ''; 
+      currentTranslatedText = '';
       document.getElementById('original').innerHTML = historyOrig + "<span class='placeholder'>[รอรับเสียงพารากราฟใหม่...]</span>";
       document.getElementById('translated').innerHTML = historyTrans + "<span class='placeholder'>[...]</span>";
-      scrollToBottom('scrollOrig'); scrollToBottom('scrollTrans');
-      if (isRecognizing) { isAutoClearing = true; recognition.stop(); }
+      scrollToBottom('scrollOrig');
+      scrollToBottom('scrollTrans');
+
+      if (isRecognizing) {
+          isAutoClearing = true;
+          recognition.stop(); 
+      }
   }
 
   function clearAllHistory() {
-      historyOrig = ''; historyTrans = ''; globalFinalTranscript = ''; currentTranslatedText = '';
+      historyOrig = '';
+      historyTrans = '';
+      globalFinalTranscript = '';
+      currentTranslatedText = '';
       document.getElementById('original').innerHTML = "<span class='placeholder'>[ล้างข้อมูลแล้ว รอรับเสียง...]</span>";
       document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
   }
 
-  function resetClearTimer() { clearTimeout(clearTimer); clearTimer = setTimeout(triggerArchive, clearDelayMs); }
+  function resetClearTimer() {
+      clearTimeout(clearTimer);
+      clearTimer = setTimeout(triggerArchive, clearDelayMs);
+  }
 
   function resetInactivityTimer() {
     clearTimeout(inactivityTimer); 
     if (isRecognizing) {
       inactivityTimer = setTimeout(() => {
-        isManualStop = true; recognition.stop();
+        isManualStop = true; 
+        recognition.stop();
         document.getElementById('original').innerHTML = historyOrig + "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
       }, IDLE_TIMEOUT_MS);
     }
@@ -207,69 +210,89 @@ custom_html = """
 
   if (window.hasOwnProperty('webkitSpeechRecognition')) {
     recognition = new webkitSpeechRecognition();
-    recognition.continuous = true; recognition.interimResults = true; recognition.lang = sttLang;          
+    recognition.continuous = true;       
+    recognition.interimResults = true;   
+    recognition.lang = sttLang;          
 
     recognition.onstart = function() {
-      isRecognizing = true; document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)..."; document.getElementById('startBtn').style.backgroundColor = "#00cc66"; resetInactivityTimer(); 
+      isRecognizing = true;
+      document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)...";
+      document.getElementById('startBtn').style.backgroundColor = "#00cc66";
+      resetInactivityTimer(); 
     };
 
     recognition.onend = function() {
-      isRecognizing = false; clearTimeout(inactivityTimer); clearTimeout(clearTimer);
+      isRecognizing = false;
+      clearTimeout(inactivityTimer);
+      clearTimeout(clearTimer);
       if (isAutoClearing) { isAutoClearing = false; try { recognition.start(); } catch(e){} return; }
       if (!isManualStop) { try { recognition.start(); return; } catch(e) {} }
-      document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)"; document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
+      document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
+      document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
     };
 
     recognition.onresult = function(event) {
-      resetInactivityTimer(); clearTimeout(clearTimer); 
+      resetInactivityTimer(); 
+      clearTimeout(clearTimer); 
       let interim_transcript = '';
-      let is_new_final_added = false; // ตัวจับว่ามีประโยคใหม่ถูกยืนยันหรือยัง
-
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) { 
-            globalFinalTranscript += event.results[i][0].transcript + ' '; 
-            is_new_final_added = true; // ✔️ เจอคำที่ยืนยันแล้ว
-        } 
-        else { 
-            interim_transcript += event.results[i][0].transcript; 
-        }
+        if (event.results[i].isFinal) { globalFinalTranscript += event.results[i][0].transcript + ' '; } 
+        else { interim_transcript += event.results[i][0].transcript; }
       }
 
-      if (globalFinalTranscript.length > MAX_CHARS) { triggerArchive(); return; }
+      let currentText = globalFinalTranscript + interim_transcript;
+      if (currentText.length > MAX_CHARS) { triggerArchive(); return; }
 
-      // อัปเดตกล่องซ้าย (ต้นฉบับโชว์สีแดงเหมือนเดิม)
       document.getElementById('original').innerHTML = historyOrig + globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
       scrollToBottom('scrollOrig');
 
-      // 🌟 [NEW] แปลภาษาเฉพาะตอนที่ "จบประโยค" เท่านั้น! (ข้ามพวกตัวหนังสือสีแดงไปเลย)
-      if (is_new_final_added && globalFinalTranscript.trim() !== "") {
-          translateTextPOST(globalFinalTranscript, srcLang, destLang);
-          resetClearTimer(); 
+      if (currentText.trim() !== "") {
+        clearTimeout(translateTimeout);
+        // การยิง API ตัวเดิมที่ไว้ใจได้
+        translateTimeout = setTimeout(() => { translateText(currentText, srcLang, destLang); }, DEBOUNCE_MS); 
+        resetClearTimer(); 
       }
     };
   }
 
-  function startDictation() { if (!isRecognizing) { isManualStop = false; isAutoClearing = false; recognition.lang = sttLang; recognition.start(); } }
-  function stopDictation() { if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); } }
+  function startDictation() {
+    if (!isRecognizing) { isManualStop = false; isAutoClearing = false; recognition.lang = sttLang; recognition.start(); }
+  }
 
-  // 🌟 [NEW] ยิง API ด้วย POST Method และซ่อน Payload ไว้ใน Body (Google จับยากขึ้นมากๆ)
-  function translateTextPOST(text, src, dest) {
-    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t`;
+  function stopDictation() {
+    if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); }
+  }
+  
+  // อัปเดตฟังก์ชันดึงคู่ภาษาจาก Dropdown
+  function changeLang() {
+    let mode = document.getElementById('langPairSelect').value;
     
-    fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ q: text })
-    })
-    .then(response => response.json())
-    .then(data => {
+    if (mode === "th2en") { sttLang = "th-TH"; srcLang = "th"; destLang = "en"; }
+    else if (mode === "th2ko") { sttLang = "th-TH"; srcLang = "th"; destLang = "ko"; }
+    else if (mode === "en2th") { sttLang = "en-US"; srcLang = "en"; destLang = "th"; }
+    else if (mode === "en2ko") { sttLang = "en-US"; srcLang = "en"; destLang = "ko"; }
+    else if (mode === "ko2th") { sttLang = "ko-KR"; srcLang = "ko"; destLang = "th"; }
+    else if (mode === "ko2en") { sttLang = "ko-KR"; srcLang = "ko"; destLang = "en"; }
+
+    let titles = { 'th': '🇹🇭 ไทย', 'en': '🇬🇧 อังกฤษ', 'ko': '🇰🇷 เกาหลี' };
+    document.getElementById('origTitle').innerText = `🎙️ ต้นฉบับ (${titles[srcLang]}):`;
+    document.getElementById('transTitle').innerText = `🌐 คำแปล (${titles[destLang]}):`;
+
+    if(isRecognizing) { isManualStop = true; stopDictation(); }
+  }
+
+  function translateText(text, src, dest) {
+    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t&q=${encodeURI(text)}`;
+    fetch(url)
+      .then(response => response.json())
+      .then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) { translated_text += data[0][i][0]; }
         currentTranslatedText = translated_text; 
         document.getElementById('translated').innerHTML = historyTrans + currentTranslatedText;
         scrollToBottom('scrollTrans');
-    })
-    .catch(err => console.error("Translate Error:", err)); 
+      })
+      .catch(err => console.error("Translate Error:", err)); 
   }
 </script>
 </body>
