@@ -35,6 +35,8 @@ custom_html = """
   .text { font-size: 22px; color: #e6eaf1; line-height: 1.6; }
   .interim { color: #ff4b4b; } 
   .placeholder { color: #555; font-size: 18px; font-style: italic; }
+  /* เส้นคั่นระหว่างพารากราฟประวัติ */
+  hr.history-divider { border: 0; border-top: 1px dashed #444; margin: 15px 0; }
 </style>
 </head>
 <body>
@@ -49,7 +51,7 @@ custom_html = """
         </div>
     </div>
     <div class="control-box">
-        <div class="control-title">⏱️ ถ้าเงียบเกินกี่วินาที ถึงจะล้างหน้าจอขึ้นพารากราฟใหม่?</div>
+        <div class="control-title">⏱️ ถ้าเงียบเกินกี่วินาที ถึงจะตัดขึ้นพารากราฟใหม่?</div>
         <div class="slider-container">
             <input type="range" id="delaySlider" min="3" max="30" value="10" oninput="updateDelay()">
             <div class="slider-val"><span id="delayValue">10</span> วินาที</div>
@@ -60,6 +62,8 @@ custom_html = """
   <div class="btn-container">
       <button id="startBtn" onclick="startDictation()">🎤 กดเพื่อพูด (Live)</button>
       <button id="stopBtn" onclick="stopDictation()">⏹️ หยุด</button>
+      <!-- เพิ่มปุ่มล้างหน้าจอแบบ Manual เผื่อจู๊ปอยากลบประวัติเอง -->
+      <button id="clearBtn" onclick="clearAllHistory()" style="background-color: #333; color: #aaa; margin-left: 10px;">🗑️ ล้างหน้าจอทั้งหมด</button>
   </div>
 
   <div class="output-container">
@@ -83,16 +87,21 @@ custom_html = """
   let isRecognizing = false;
   let isManualStop = false; 
   let isAutoClearing = false; 
+  
   let globalFinalTranscript = ''; 
+  let currentTranslatedText = ''; // เก็บคำแปลล่าสุดก่อนถูกตัดพารากราฟ
+  
+  // 🌟 [NEW] ตัวแปรคลังสมบัติ เก็บประวัติข้อความทั้งหมด
+  let historyOrig = '';
+  let historyTrans = '';
   
   let clearDelayMs = 10000; 
   let clearTimer;           
   let inactivityTimer;      
   
-  // 🌟 [NEW] ตัวแปรสำหรับจัดการการยิง API ไม่ให้ถี่เกินไป
   let translateTimeout;     
-  const DEBOUNCE_MS = 600; // หน่วงเวลาแปล 0.6 วินาที หลังจากได้ยินคำล่าสุด
-  const MAX_CHARS = 1000;  // บังคับเคลียร์หน้าจอถ้าตัวอักษรเกิน 1000 ตัว (กัน URL พัง)
+  const DEBOUNCE_MS = 600; 
+  const MAX_CHARS = 1000;  
   
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   let sttLang = "th-TH";    
@@ -110,20 +119,44 @@ custom_html = """
       clearDelayMs = parseInt(val) * 1000;
   }
 
-  // ฟังก์ชันบังคับเคลียร์หน้าจอ
-  function triggerClear() {
+  // 🌟 [NEW] ฟังก์ชันสำหรับเก็บข้อความเข้าคลังประวัติ แทนการลบทิ้ง
+  function triggerArchive() {
+      if (globalFinalTranscript.trim() !== "") {
+          // ดันข้อความเก่าเข้าคลัง พร้อมขีดเส้นประคั่น
+          historyOrig += "<div>" + globalFinalTranscript + "</div><hr class='history-divider'>";
+          historyTrans += "<div>" + currentTranslatedText + "</div><hr class='history-divider'>";
+      }
+
+      // เคลียร์เฉพาะ "ความจำระยะสั้น" เพื่อกัน Google บล็อก
       globalFinalTranscript = ''; 
-      document.getElementById('original').innerHTML = "<span class='placeholder'>[ขึ้นพารากราฟใหม่...]</span>";
-      document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
+      currentTranslatedText = '';
+
+      // อัปเดตหน้าจอ โดยเอาประวัติมารวมกับ Placeholder
+      document.getElementById('original').innerHTML = historyOrig + "<span class='placeholder'>[รอรับเสียงพารากราฟใหม่...]</span>";
+      document.getElementById('translated').innerHTML = historyTrans + "<span class='placeholder'>[...]</span>";
+      
+      scrollToBottom('scrollOrig');
+      scrollToBottom('scrollTrans');
+
       if (isRecognizing) {
           isAutoClearing = true;
-          recognition.stop(); 
+          recognition.stop(); // บังคับไมค์รีสตาร์ทเพื่อเคลียร์ Buffer
       }
+  }
+
+  // ปุ่มสำหรับล้างประวัติทั้งหมด (กรณีอยากเริ่มพูดเรื่องใหม่หมดเลย)
+  function clearAllHistory() {
+      historyOrig = '';
+      historyTrans = '';
+      globalFinalTranscript = '';
+      currentTranslatedText = '';
+      document.getElementById('original').innerHTML = "<span class='placeholder'>[ล้างข้อมูลแล้ว รอรับเสียง...]</span>";
+      document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
   }
 
   function resetClearTimer() {
       clearTimeout(clearTimer);
-      clearTimer = setTimeout(triggerClear, clearDelayMs);
+      clearTimer = setTimeout(triggerArchive, clearDelayMs);
   }
 
   function resetInactivityTimer() {
@@ -132,7 +165,7 @@ custom_html = """
       inactivityTimer = setTimeout(() => {
         isManualStop = true; 
         recognition.stop();
-        document.getElementById('original').innerHTML = "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
+        document.getElementById('original').innerHTML = historyOrig + "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
       }, IDLE_TIMEOUT_MS);
     }
   }
@@ -145,7 +178,6 @@ custom_html = """
 
     recognition.onstart = function() {
       isRecognizing = true;
-      globalFinalTranscript = ''; 
       document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)...";
       document.getElementById('startBtn').style.backgroundColor = "#00cc66";
       resetInactivityTimer(); 
@@ -185,18 +217,17 @@ custom_html = """
 
       let currentText = globalFinalTranscript + interim_transcript;
       
-      // 🌟 [NEW] ถ้าความยาวพารากราฟเกิน 1000 ตัวอักษร ให้บังคับเคลียร์อัตโนมัติ
       if (currentText.length > MAX_CHARS) {
-          triggerClear();
+          triggerArchive();
           return;
       }
 
+      // แสดงผล = ประวัติเก่า + ข้อความที่เพิ่งพูดจบ + คำที่กำลังเดา
       document.getElementById('original').innerHTML = 
-        globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
+        historyOrig + globalFinalTranscript + '<span class="interim">' + interim_transcript + '</span>';
       scrollToBottom('scrollOrig');
 
       if (currentText.trim() !== "") {
-        // 🌟 [NEW] ระบบ Debounce: รวบยอดคำก่อนยิง API ป้องกันเซิร์ฟเวอร์บล็อก
         clearTimeout(translateTimeout);
         translateTimeout = setTimeout(() => {
             translateText(currentText, srcLang, destLang);
@@ -212,7 +243,12 @@ custom_html = """
   }
 
   function stopDictation() {
-    if (isRecognizing) { isManualStop = true; recognition.stop(); }
+    if (isRecognizing) { 
+        isManualStop = true; 
+        recognition.stop(); 
+        // เมื่อกดหยุด ให้ดันข้อความสุดท้ายเข้าคลังประวัติทันที
+        setTimeout(triggerArchive, 1000); 
+    }
   }
   
   function changeLang() {
@@ -236,10 +272,14 @@ custom_html = """
       .then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) { translated_text += data[0][i][0]; }
-        document.getElementById('translated').innerHTML = translated_text;
+        
+        currentTranslatedText = translated_text; 
+        
+        // แสดงผล = ประวัติเก่า + คำแปลชุดปัจจุบัน
+        document.getElementById('translated').innerHTML = historyTrans + currentTranslatedText;
         scrollToBottom('scrollTrans');
       })
-      .catch(err => console.error("Translate Error:", err)); // ใส่ catch เผื่อดัก Error
+      .catch(err => console.error("Translate Error:", err)); 
   }
 </script>
 </body>
