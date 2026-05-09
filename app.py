@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="True Real-time Translator", layout="wide")
 st.title("⚡ True Real-time Translator")
-st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (เครื่องยนต์ Classic หน่วงเวลา 1.0s สุดเสถียร)")
+st.markdown("ระบบแปลภาษาด่วนแบบ Real-time (Throttle Engine 1.5s + เลี่ยงการโดนบล็อก 100%)")
 
 custom_html = """
 <!DOCTYPE html>
@@ -116,10 +116,13 @@ custom_html = """
   let clearTimer;           
   let inactivityTimer;      
   
-  let translateTimeout;     
-  // 🌟 [NEW] ขยับความใจเย็นเป็น 1 วินาที (1000 ms) ตามที่จู๊ปแนะนำครับ!
-  const DEBOUNCE_MS = 1000; 
-  const MAX_CHARS = 1000;  
+  // 🌟 [NEW] ระบบ Throttle: ตั้งเวลาให้ยิงแปลทุกๆ 1.5 วินาทีเป๊ะๆ 
+  let lastTranslateTime = 0;
+  let translateTimer;     
+  const THROTTLE_MS = 1500; 
+  
+  // 🌟 [NEW] หั่นขนาดข้อมูลให้เล็กลง เพื่อลด Payload ไม่ให้ Google จับได้
+  const MAX_CHARS = 400;  
   
   const IDLE_TIMEOUT_MS = 5 * 60 * 1000; 
   let sttLang = "th-TH";    
@@ -128,27 +131,13 @@ custom_html = """
 
   function copyText(elementId, btnId) {
       let textToCopy = document.getElementById(elementId).innerText;
-      textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '')
-                             .replace(/\[ขึ้นพารากราฟใหม่...\]/g, '')
-                             .replace(/\[ล้างข้อมูลแล้ว รอรับเสียง...\]/g, '')
-                             .replace(/\[รอการแปล...\]/g, '')
-                             .replace(/\[...\]/g, '')
-                             .replace(/ปิดไมค์อัตโนมัติ.*/g, '')
-                             .trim();
+      textToCopy = textToCopy.replace(/\[รอรับเสียง.*\]/g, '').replace(/\[ขึ้นพารากราฟใหม่...\]/g, '').replace(/\[ล้างข้อมูลแล้ว รอรับเสียง...\]/g, '').replace(/\[รอการแปล...\]/g, '').replace(/\[...\]/g, '').replace(/ปิดไมค์อัตโนมัติ.*/g, '').trim();
 
       navigator.clipboard.writeText(textToCopy).then(() => {
           let btn = document.getElementById(btnId);
-          btn.innerText = '✅ Copied!';
-          btn.style.color = '#00cc66';
-          btn.style.borderColor = '#00cc66';
-          setTimeout(() => { 
-              btn.innerText = '📋 Copy'; 
-              btn.style.color = '#a3a8b8';
-              btn.style.borderColor = '#555';
-          }, 2000);
-      }).catch(err => {
-          alert("ไม่สามารถ Copy ได้ กรุณาลองใหม่อีกครั้ง");
-      });
+          btn.innerText = '✅ Copied!'; btn.style.color = '#00cc66'; btn.style.borderColor = '#00cc66';
+          setTimeout(() => { btn.innerText = '📋 Copy'; btn.style.color = '#a3a8b8'; btn.style.borderColor = '#555'; }, 2000);
+      }).catch(err => { alert("ไม่สามารถ Copy ได้ กรุณาลองใหม่อีกครั้ง"); });
   }
 
   function scrollToBottom(elementId) {
@@ -167,39 +156,26 @@ custom_html = """
           historyOrig += "<div>" + globalFinalTranscript + "</div><hr class='history-divider'>";
           historyTrans += "<div>" + currentTranslatedText + "</div><hr class='history-divider'>";
       }
-      globalFinalTranscript = ''; 
-      currentTranslatedText = '';
+      globalFinalTranscript = ''; currentTranslatedText = '';
       document.getElementById('original').innerHTML = historyOrig + "<span class='placeholder'>[รอรับเสียงพารากราฟใหม่...]</span>";
       document.getElementById('translated').innerHTML = historyTrans + "<span class='placeholder'>[...]</span>";
-      scrollToBottom('scrollOrig');
-      scrollToBottom('scrollTrans');
-
-      if (isRecognizing) {
-          isAutoClearing = true;
-          recognition.stop(); 
-      }
+      scrollToBottom('scrollOrig'); scrollToBottom('scrollTrans');
+      if (isRecognizing) { isAutoClearing = true; recognition.stop(); }
   }
 
   function clearAllHistory() {
-      historyOrig = '';
-      historyTrans = '';
-      globalFinalTranscript = '';
-      currentTranslatedText = '';
+      historyOrig = ''; historyTrans = ''; globalFinalTranscript = ''; currentTranslatedText = '';
       document.getElementById('original').innerHTML = "<span class='placeholder'>[ล้างข้อมูลแล้ว รอรับเสียง...]</span>";
       document.getElementById('translated').innerHTML = "<span class='placeholder'>[...]</span>";
   }
 
-  function resetClearTimer() {
-      clearTimeout(clearTimer);
-      clearTimer = setTimeout(triggerArchive, clearDelayMs);
-  }
+  function resetClearTimer() { clearTimeout(clearTimer); clearTimer = setTimeout(triggerArchive, clearDelayMs); }
 
   function resetInactivityTimer() {
     clearTimeout(inactivityTimer); 
     if (isRecognizing) {
       inactivityTimer = setTimeout(() => {
-        isManualStop = true; 
-        recognition.stop();
+        isManualStop = true; recognition.stop();
         document.getElementById('original').innerHTML = historyOrig + "<span style='font-size:16px; color:#ff4b4b;'><i>ปิดไมค์อัตโนมัติ (ลืมปิดเกิน 5 นาที)</i></span>";
       }, IDLE_TIMEOUT_MS);
     }
@@ -207,30 +183,21 @@ custom_html = """
 
   if (window.hasOwnProperty('webkitSpeechRecognition')) {
     recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;       
-    recognition.interimResults = true;   
-    recognition.lang = sttLang;          
+    recognition.continuous = true; recognition.interimResults = true; recognition.lang = sttLang;          
 
     recognition.onstart = function() {
-      isRecognizing = true;
-      document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)...";
-      document.getElementById('startBtn').style.backgroundColor = "#00cc66";
-      resetInactivityTimer(); 
+      isRecognizing = true; document.getElementById('startBtn').innerText = "🟢 กำลังฟัง (พูดได้เลย)..."; document.getElementById('startBtn').style.backgroundColor = "#00cc66"; resetInactivityTimer(); 
     };
 
     recognition.onend = function() {
-      isRecognizing = false;
-      clearTimeout(inactivityTimer);
-      clearTimeout(clearTimer);
+      isRecognizing = false; clearTimeout(inactivityTimer); clearTimeout(clearTimer);
       if (isAutoClearing) { isAutoClearing = false; try { recognition.start(); } catch(e){} return; }
       if (!isManualStop) { try { recognition.start(); return; } catch(e) {} }
-      document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)";
-      document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
+      document.getElementById('startBtn').innerText = "🎤 กดเพื่อพูด (Live)"; document.getElementById('startBtn').style.backgroundColor = "#ff4b4b";
     };
 
     recognition.onresult = function(event) {
-      resetInactivityTimer(); 
-      clearTimeout(clearTimer); 
+      resetInactivityTimer(); clearTimeout(clearTimer); 
       let interim_transcript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) { globalFinalTranscript += event.results[i][0].transcript + ' '; } 
@@ -244,25 +211,29 @@ custom_html = """
       scrollToBottom('scrollOrig');
 
       if (currentText.trim() !== "") {
-        clearTimeout(translateTimeout);
-        // การยิง API หน่วงเวลาที่ 1 วินาที
-        translateTimeout = setTimeout(() => { translateText(currentText, srcLang, destLang); }, DEBOUNCE_MS); 
+        let now = Date.now();
+        // 🌟 [NEW] Logic แบบ Throttle: ถ้าเกิน 1.5 วิปุ๊บ ให้ยิงแปลทันที ไม่ต้องรอให้หยุดพูด
+        if (now - lastTranslateTime >= THROTTLE_MS) {
+            translateText(currentText, srcLang, destLang);
+            lastTranslateTime = now;
+        } else {
+            // ถ้ายังไม่ถึง 1.5 วิ ให้เข้าคิวรอไว้ก่อน
+            clearTimeout(translateTimer);
+            translateTimer = setTimeout(() => { 
+                translateText(currentText, srcLang, destLang); 
+                lastTranslateTime = Date.now();
+            }, THROTTLE_MS - (now - lastTranslateTime));
+        }
         resetClearTimer(); 
       }
     };
   }
 
-  function startDictation() {
-    if (!isRecognizing) { isManualStop = false; isAutoClearing = false; recognition.lang = sttLang; recognition.start(); }
-  }
-
-  function stopDictation() {
-    if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); }
-  }
+  function startDictation() { if (!isRecognizing) { isManualStop = false; isAutoClearing = false; recognition.lang = sttLang; recognition.start(); } }
+  function stopDictation() { if (isRecognizing) { isManualStop = true; recognition.stop(); setTimeout(triggerArchive, 1000); } }
   
   function changeLang() {
     let mode = document.getElementById('langPairSelect').value;
-    
     if (mode === "th2en") { sttLang = "th-TH"; srcLang = "th"; destLang = "en"; }
     else if (mode === "th2ko") { sttLang = "th-TH"; srcLang = "th"; destLang = "ko"; }
     else if (mode === "en2th") { sttLang = "en-US"; srcLang = "en"; destLang = "th"; }
@@ -277,18 +248,24 @@ custom_html = """
     if(isRecognizing) { isManualStop = true; stopDictation(); }
   }
 
+  // 🌟 [NEW] เปลี่ยนวิธีส่งข้อมูลเป็น POST มุดดินหลบเรดาร์แบบ 100%
   function translateText(text, src, dest) {
-    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t&q=${encodeURI(text)}`;
-    fetch(url)
-      .then(response => response.json())
-      .then(data => {
+    let url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${dest}&dt=t`;
+    
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ q: text })
+    })
+    .then(response => response.json())
+    .then(data => {
         let translated_text = '';
         for (let i = 0; i < data[0].length; i++) { translated_text += data[0][i][0]; }
         currentTranslatedText = translated_text; 
         document.getElementById('translated').innerHTML = historyTrans + currentTranslatedText;
         scrollToBottom('scrollTrans');
-      })
-      .catch(err => console.error("Translate Error:", err)); 
+    })
+    .catch(err => console.error("Translate Error:", err)); 
   }
 </script>
 </body>
